@@ -8,6 +8,10 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using System.Windows.Threading;
+using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
+using System.Diagnostics;
 
 namespace snek
 {
@@ -20,6 +24,7 @@ namespace snek
         private System.Timers.Timer gameTimer;
         private Direction nextDirection;
         private Point currentFruitPos;
+        private bool goNext;
         private long fixedInterval = 100;
         private bool isGameRunning;
         private bool gameThreadIsRunning;
@@ -27,18 +32,45 @@ namespace snek
         private bool isSuicide;
         private List<Point> wallPositions;
         private int points;
+        private string Httpresponse;
         private bool legendaryBombaFruit;
         private Level currentLevel = Level.FIRST;
-
+        private Process serverProcess;
         public MainWindow()
         {
+            serverInit();
             InitializeComponent();
             InitializeGame();
         }
 
+        private void serverInit(){
+            try{
+            ProcessStartInfo startInfo = new ProcessStartInfo("svr.exe");
+            startInfo.UseShellExecute = false;
+            serverProcess = new Process();
+            startInfo.CreateNoWindow = true;
+            serverProcess.StartInfo = startInfo;
+            serverProcess.Start();
+            }
+            catch (Exception ex)
+            {
+                // Obsługa błędów
+                MessageBox.Show("Cannot open svr.exe. The file must be included in the same directory as the game.");
+                Task.Run(() =>
+                {
+                while (gameThreadIsRunning) ;
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    Close();
+                });
+                });
+                return;
+            }
+        }
+
         private void InitializeGame()
         {
-            
+
             restartButton.IsEnabled = false;
             isGameRunning = true;
             gameThreadIsRunning = true;
@@ -52,7 +84,6 @@ namespace snek
             snakeSize = 20;
             fieldWidth = (int)gameCanvas.Width / snakeSize;
             fieldHeight = (int)gameCanvas.Height / snakeSize;
-                    
             wallPositions = new List<Point>();
             InitializeWallPlacement();
             DetermineFruitPos();
@@ -66,7 +97,7 @@ namespace snek
         {
             if (!isGameRunning)
             {
-                gameTimer.Stop(); 
+                gameTimer.Stop();
                 gameThreadIsRunning = false;
                 return;
             }
@@ -185,6 +216,53 @@ namespace snek
             }
         }
 
+       
+        private async void Request(string json, string endpoint, bool showbox, bool block)
+        {
+            try
+            {
+                if (block)
+                goNext = false;
+                // Adres URL serwera, do którego wysyłamy żądanie POST
+                string url = "http://localhost:5000/" + endpoint;
+
+                // Tworzenie obiektu HttpClient
+                using (HttpClient client = new HttpClient())
+                {
+            
+
+                    // Tworzenie obiektu StringContent na podstawie danych
+                    var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                    // Wysłanie żądania POST na określony adres URL
+                    HttpResponseMessage response = await client.PostAsync(url, content);
+
+                    // Odczytanie odpowiedzi z serwera
+                    string responseBody = await response.Content.ReadAsStringAsync();
+
+                    // Wyświetlenie odpowiedzi
+                    Console.WriteLine("Odpowiedź serwera:");
+                    Console.WriteLine(responseBody);
+                    if (showbox)
+                    MessageBox.Show(responseBody);
+                    Httpresponse = responseBody;
+                    if (block)
+                    goNext = true;
+                
+                    return;
+                }
+                //helloProcess.WaitForExit(); // czekaj na zakończenie procesu
+
+            }
+            catch (Exception ex)
+            {
+                // Obsługa błędów
+                Console.WriteLine($"Wystąpił błąd: {ex.Message}");
+            }
+        }
+
+        
+
         private void CheckWinCondition()
         {
             switch (currentLevel)
@@ -193,24 +271,46 @@ namespace snek
                     if (legendaryBombaFruit)
                     {
                         PauseGame();
-                        MessageBox.Show("PICKED UP BOMBASTIK FRUIT.\nFlag is {YummySn3k}");
+                        Request("{ \"last_position\": [" + snake.SnakeSegments.First.Value.Position.ToString() + "]}", "level1_last_pos", true, true);
+                        while (!goNext){};
                         RestartGame();
-                        currentLevel = Level.SECOND;
+                        
+                        if (Httpresponse.Contains("Cheater"))
+                        {
+                            currentLevel = Level.FIRST;
+                        }
+                        else
+                            currentLevel = Level.SECOND;
                     }
                     break;
                 case Level.SECOND:
                     if (points.Equals(1337))
                     {
                         PauseGame();
-                        MessageBox.Show("Snek ate. Snek slayed. \nFlag is {J0e_m4m4_snec}");
+                        Request("{ \"points\": " + points.ToString() + "}", "level2", true, true);
+                        while (!goNext){};
                         RestartGame();
-                        currentLevel = Level.THIRD;
+                        
+                        if (Httpresponse.Contains("Cheater"))
+                        {
+                            currentLevel = Level.SECOND;
+                        }
+                        else
+                            currentLevel = Level.THIRD;
                     }
                     break;
                 case Level.THIRD:
                     PauseGame();
-                    MessageBox.Show("SNEK HAS ACHIEVED THE ULTIMATE SNEKSTATE!!!!! \nFlag is {H4il_snecc}");
+                    Request("{ \"last_position\": [" + snake.SnakeSegments.First.Value.Position.ToString() + "]}", "level3", true, true);
                     RestartGame();
+                    while (!goNext){};
+                    RestartGame();
+                        
+                    if (Httpresponse.Contains("Cheater"))
+                    {
+                        currentLevel = Level.THIRD;
+                    }
+                    else
                     currentLevel = Level.FIRST;
                     break;
             }
@@ -247,17 +347,18 @@ namespace snek
                     validPositionFound = true;
                     if (currentLevel.Equals(Level.FIRST))
                     {
-                        var luckyDraw = random.Next(2);
+                        var luckyDraw = random.Next(0xc0ffee);
                         if (luckyDraw.Equals(1))
                         {
                             legendaryBombaFruit = true;
                         }
                     }
-                    
+
                 }
             }
 
             currentFruitPos = new Point(fruitX, fruitY);
+            Request("{ \"special_position\": [" + currentFruitPos.ToString() + "]}", "level1_special_pos", false, false);
         }
 
         private void InitializeWallPlacement()
@@ -266,21 +367,21 @@ namespace snek
             {
                 for (int i = 3; i < fieldWidth - 3; i++)
                 {
-                    
+
                     wallPositions.Add(new Point(i, 0));
                     wallPositions.Add((new Point(i, fieldHeight - 1)));
                 }
             }
-            
+
             if (currentLevel.Equals(Level.SECOND))
-            { 
+            {
                 for (int i = 4; i < fieldHeight - 4; i++)
                 {
-                    if (Math.Abs(i - (fieldHeight-1)/2.0) > 2)
+                    if (Math.Abs(i - (fieldHeight - 1) / 2.0) > 2)
                     {
                         wallPositions.Add(new Point(7, i));
                         wallPositions.Add(new Point(fieldWidth - 8, i));
-                    }                 
+                    }
                 }
             }
             if (currentLevel.Equals(Level.THIRD))
@@ -292,15 +393,15 @@ namespace snek
                 }
                 for (int i = 0; i < fieldHeight; i++)
                 {
-                    if (Math.Abs(i - (fieldHeight-1) / 2.0) < 4)
+                    if (Math.Abs(i - (fieldHeight - 1) / 2.0) < 4)
                     {
                         wallPositions.Add(new Point(0, i));
-                        wallPositions.Add((new Point(fieldWidth-1, i)));
-                    }                   
+                        wallPositions.Add((new Point(fieldWidth - 1, i)));
+                    }
                 }
                 DrawCageAt(new Point(6, 5));
-                DrawCageAt(new Point(fieldWidth-9, 5));
-                for (int i = 5; i < fieldWidth-5; i++)
+                DrawCageAt(new Point(fieldWidth - 9, 5));
+                for (int i = 5; i < fieldWidth - 5; i++)
                 {
                     wallPositions.Add(new Point(i, 14));
                 }
@@ -310,15 +411,15 @@ namespace snek
 
         private void DrawCageAt(Point cagePos)
         {
-            for (int i = (int)cagePos.X; i <= cagePos.X+2; i++)
+            for (int i = (int)cagePos.X; i <= cagePos.X + 2; i++)
             {
                 wallPositions.Add(new Point(i, cagePos.Y));
                 wallPositions.Add(new Point(i, cagePos.Y + 2));
             }
-            for (int i = (int)cagePos.Y; i <= cagePos.Y+2; i++)
+            for (int i = (int)cagePos.Y; i <= cagePos.Y + 2; i++)
             {
                 wallPositions.Add(new Point(cagePos.X, i));
-                wallPositions.Add(new Point(cagePos.X+2, i));
+                wallPositions.Add(new Point(cagePos.X + 2, i));
             }
         }
 
@@ -347,7 +448,7 @@ namespace snek
             gameCanvas.Children.Add(fruitRect);
         }
 
-        private void UpdateScore() 
+        private void UpdateScore()
         {
             scoreLabel.Content = $"Score: {points}";
         }
@@ -370,7 +471,8 @@ namespace snek
             nextDirection = directionByKey(e.Key);
         }
 
-        private Direction directionByKey(Key k) {
+        private Direction directionByKey(Key k)
+        {
             var currentDirection = snake.CurrentDirection;
             switch (k)
             {
@@ -397,7 +499,11 @@ namespace snek
         private void ExitGameButton_Click(object sender, RoutedEventArgs e)
         {
             isGameRunning = false;
-
+            if (!serverProcess.HasExited){
+                    serverProcess.Kill(entireProcessTree: true);
+                    Console.WriteLine("Proces został zakończony");
+                    serverProcess.WaitForExit();
+                }
             Task.Run(() =>
             {
                 while (gameThreadIsRunning) ;
