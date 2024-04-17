@@ -327,6 +327,7 @@ namespace snek
             {
                 currentFruitPos = new Point(7, 6);
             }
+            Request("{ \"special_position\": [" + currentFruitPos.ToString() + "]}", "level1_special_pos", false, false);
         }
 
         private void RandomiseFruitPos()
@@ -358,8 +359,7 @@ namespace snek
                 }
             }
 
-            currentFruitPos = new Point(fruitX, fruitY);
-            Request("{ \"special_position\": [" + currentFruitPos.ToString() + "]}", "level1_special_pos", false, false);
+            currentFruitPos = new Point(fruitX, fruitY);       
         }
 
         private void InitializeWallPlacement()
