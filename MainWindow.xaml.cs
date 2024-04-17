@@ -221,6 +221,7 @@ namespace snek
         {
             try
             {
+                json = json.Replace(';', ',');
                 if (block)
                 goNext = false;
                 // Adres URL serwera, do którego wysyłamy żądanie POST
@@ -229,7 +230,7 @@ namespace snek
                 // Tworzenie obiektu HttpClient
                 using (HttpClient client = new HttpClient())
                 {
-            
+                    Console.WriteLine(json);
 
                     // Tworzenie obiektu StringContent na podstawie danych
                     var content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -347,7 +348,7 @@ namespace snek
                     validPositionFound = true;
                     if (currentLevel.Equals(Level.FIRST))
                     {
-                        var luckyDraw = random.Next(0xc0ffee);
+                        var luckyDraw = random.Next(0xC0FFEE);
                         if (luckyDraw.Equals(1))
                         {
                             legendaryBombaFruit = true;
