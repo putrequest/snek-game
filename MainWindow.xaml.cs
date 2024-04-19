@@ -40,6 +40,7 @@ namespace snek
         {
             serverInit();
             InitializeComponent();
+            this.Closing += MainWindow_Closing;
             InitializeGame();
         }
 
@@ -498,6 +499,24 @@ namespace snek
         }
 
         private void ExitGameButton_Click(object sender, RoutedEventArgs e)
+        {
+            isGameRunning = false;
+            if (!serverProcess.HasExited){
+                    serverProcess.Kill(entireProcessTree: true);
+                    Console.WriteLine("Proces został zakończony");
+                    serverProcess.WaitForExit();
+                }
+            Task.Run(() =>
+            {
+                while (gameThreadIsRunning) ;
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    Close();
+                });
+            });
+        }
+
+        private void MainWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
             isGameRunning = false;
             if (!serverProcess.HasExited){
